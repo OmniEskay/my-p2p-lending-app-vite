@@ -9,6 +9,7 @@ import BorrowPage from './pages/BorrowPage';
 import MyLoansPage from './pages/MyLoansPage';
 import { PAGES, APP_NAME } from './config/constants';
 import LoadingSpinner from './components/Common/LoadingSpinner';
+import EditProfilePage from './pages/EditProfilePage';
 
 // This component will handle routing logic based on auth state and currentPage
 function AppContent() {
@@ -56,6 +57,9 @@ function AppContent() {
       case PAGES.MY_LOANS:
         return currentUser ? <MyLoansPage setCurrentPage={setCurrentPage} /> : <LoginPage setCurrentPage={setCurrentPage} />;
       default:
+      case PAGES.EDIT_PROFILE:
+        return currentUser ? <EditProfilePage setCurrentPage={setCurrentPage} /> : <LoginPage setCurrentPage={setCurrentPage} />;
+// ...
         return <LoginPage setCurrentPage={setCurrentPage} />;
     }
   };

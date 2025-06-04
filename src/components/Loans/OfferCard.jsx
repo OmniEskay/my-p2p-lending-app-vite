@@ -14,7 +14,7 @@ const CalendarIcon = () => (
         <path fillRule="evenodd" d="M5.75 2a.75.75 0 01.75.75V4h7V2.75a.75.75 0 011.5 0V4h.25A2.75 2.75 0 0118 6.75v8.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25v-8.5A2.75 2.75 0 014.75 4H5V2.75A.75.75 0 015.75 2zm-1 5.5c0-.414.336-.75.75-.75h10.5a.75.75 0 010 1.5H5.5a.75.75 0 01-.75-.75z" clipRule="evenodd" />
     </svg>
 );
-const InfoIcon = ({ className = "w-4 h-4 mr-1.5 inline-block text-textLight" }) => (
+const InfoIcon = ({ className = "w-4 h-4 mr-1.5 inline-block text-primary" }) => ( // Defaulted to primary for detail items
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
     </svg>
@@ -48,14 +48,14 @@ function OfferCard({ offer, currentUserId, onAccept, onCancel, onDetailsClick, s
         </div>
         <div className="space-y-1 text-sm mb-3">
             <p className="flex items-center text-textLight">
-                <InfoIcon className="w-4 h-4 mr-1.5 inline-block text-primary"/> Interest Rate: <span className="text-textDark ml-1 font-medium">{offer.interestRate?.toFixed(1)}% APR</span>
+                <InfoIcon /> Interest Rate: <span className="text-textDark ml-1 font-medium">{offer.interestRate?.toFixed(1)}% APR</span>
             </p>
             <p className="flex items-center text-textLight">
-                <InfoIcon className="w-4 h-4 mr-1.5 inline-block text-primary"/> Term: <span className="text-textDark ml-1 font-medium">{offer.termMonths} months</span>
+                <InfoIcon /> Term: <span className="text-textDark ml-1 font-medium">{offer.termMonths} months</span>
             </p>
             {offer.purpose && (
                 <p className="flex items-center text-textLight">
-                    <InfoIcon className="w-4 h-4 mr-1.5 inline-block text-primary"/> Purpose: <span className="text-textDark ml-1 font-medium">{offer.purpose}</span>
+                    <InfoIcon /> Purpose: <span className="text-textDark ml-1 font-medium">{offer.purpose}</span>
                 </p>
             )}
         </div>

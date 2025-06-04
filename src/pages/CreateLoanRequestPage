@@ -1,0 +1,202 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import Button from '../components/Common/Button';
+import InputField from '../components/Common/InputField';
+import LoadingSpinner from '../components/Common/LoadingSpinner';
+import { createLoanRequest } from '../services/firestoreService';
+import { PAGES, MIN_LOAN_AMOUNT, MAX_LOAN_AMOUNT } from '../config/constants';
+
+function CreateLoanRequestPage({ setCurrentPage }) {
+  const { currentUser, userData } = useAuth();
+
+  const [amount, setAmount] = useState('');
+  const [desiredInterestRate, setDesiredInterestRate] = useState('');
+  const [termMonths, setTermMonths] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [creditScore, setCreditScore] = useState(''); // User can input, or prefill if available
+
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [formSuccess, setFormSuccess] = useState('');
+
+  useEffect(() => {
+    // Pre-fill credit score if available in userData, but allow user to override
+    if (userData?.creditScore) {
+      setCreditScore(userData.creditScore.toString());
+    }
+  }, [userData]);
+
+  const resetForm = () => {
+    setAmount('');
+    setDesiredInterestRate('');
+    setTermMonths('');
+    setPurpose('');
+    // Don't reset credit score if it was pre-filled, unless desired
+    // setCreditScore(userData?.creditScore ? userData.creditScore.toString() : ''); 
+  };
+
+  const handleSubmitRequest = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    setFormSuccess('');
+
+    if (!currentUser) {
+      setFormError("You must be logged in to submit a loan request.");
+      return;
+    }
+
+    const parsedAmount = parseFloat(amount);
+    const parsedRate = parseFloat(desiredInterestRate);
+    const parsedTerm = parseInt(termMonths);
+    const parsedCreditScore = creditScore ? parseInt(creditScore) : null; // Allow empty credit score initially
+
+    // Validations
+    if (isNaN(parsedAmount) || parsedAmount < MIN_LOAN_AMOUNT || parsedAmount > MAX_LOAN_AMOUNT) {
+      setFormError(`Loan amount must be between $${MIN_LOAN_AMOUNT} and $${MAX_LOAN_AMOUNT}.`);
+      return;
+    }
+    if (isNaN(parsedRate) || parsedRate <= 0.1 || parsedRate > 50) {
+      setFormError("Desired interest rate must be a positive number (e.g., 0.1 to 50).");
+      return;
+    }
+    if (isNaN(parsedTerm) || parsedTerm <= 0 || parsedTerm > 120) {
+      setFormError("Loan term must be a positive number of months (e.g., 1 to 120).");
+      return;
+    }
+    if (!purpose.trim()) {
+      setFormError("Please provide a purpose for your loan request.");
+      return;
+    }
+    if (parsedCreditScore !== null && (isNaN(parsedCreditScore) || parsedCreditScore < 300 || parsedCreditScore > 850)) {
+      setFormError("If provided, credit score must be a number between 300 and 850.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const requestData = {
+        borrowerId: currentUser.uid,
+        borrowerName: userData?.displayName || currentUser.email,
+        amount: parsedAmount,
+        desiredInterestRate: parsedRate,
+        termMonths: parsedTerm,
+        purpose: purpose.trim(),
+        creditScore: parsedCreditScore, // Send null if not provided or invalid
+      };
+      await createLoanRequest(requestData);
+      setFormSuccess("Your loan request has been submitted successfully! Lenders can now view it.");
+      resetForm();
+      // Optionally navigate away or show a link to "My Loan Requests"
+      // setTimeout(() => setCurrentPage(PAGES.DASHBOARD), 3000); // Example redirect
+    } catch (err) {
+      console.error("CreateLoanRequestPage: Error submitting loan request:", err);
+      setFormError(err.message || "Failed to submit your loan request. Please try again.");
+    }
+    setSubmitting(false);
+  };
+  
+  if (!currentUser) {
+    // This page should ideally not be reachable if not logged in due to App.jsx routing
+    return (
+        <div className="text-center py-10">
+            <p className="text-textLight text-lg">Please log in to submit a loan request.</p>
+            <Button onClick={() => setCurrentPage(PAGES.LOGIN)} variant="primary" className="mt-4">
+                Go to Login
+            </Button>
+        </div>
+    );
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
+      <header className="mb-8 text-center">
+        <h1 className="text-3xl font-bold text-textDark">Request a Loan</h1>
+        <p className="text-textLight mt-2">
+          Fill out the details below to submit your loan request. Lenders will be able to view and potentially fund your request.
+        </p>
+      </header>
+
+      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl border border-palette-light-blue">
+        <form onSubmit={handleSubmitRequest} className="space-y-6">
+          <InputField
+            id="amount"
+            label="Loan Amount You Need ($)"
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder={`e.g., ${MIN_LOAN_AMOUNT} - ${MAX_LOAN_AMOUNT}`}
+            required
+            min={MIN_LOAN_AMOUNT}
+            max={MAX_LOAN_AMOUNT}
+            labelClassName="text-textDark"
+            inputClassName="focus:ring-primary focus:border-primary"
+          />
+          <InputField
+            id="desiredInterestRate"
+            label="Desired Annual Interest Rate (%)"
+            type="number"
+            step="0.01"
+            value={desiredInterestRate}
+            onChange={(e) => setDesiredInterestRate(e.target.value)}
+            placeholder="e.g., 7.5"
+            required
+            min="0.1"
+            labelClassName="text-textDark"
+            inputClassName="focus:ring-primary focus:border-primary"
+          />
+          <InputField
+            id="termMonths"
+            label="Loan Term (in months)"
+            type="number"
+            value={termMonths}
+            onChange={(e) => setTermMonths(e.target.value)}
+            placeholder="e.g., 12, 24, 36"
+            required
+            min="1"
+            labelClassName="text-textDark"
+            inputClassName="focus:ring-primary focus:border-primary"
+          />
+          <InputField
+            id="purpose"
+            label="Purpose of the Loan"
+            type="text"
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value)}
+            placeholder="e.g., Consolidate debt, Home improvement, Business startup"
+            required
+            labelClassName="text-textDark"
+            inputClassName="focus:ring-primary focus:border-primary"
+          />
+          <InputField
+            id="creditScore"
+            label="Your Credit Score (Optional)"
+            type="number"
+            value={creditScore}
+            onChange={(e) => setCreditScore(e.target.value)}
+            placeholder="e.g., 720 (300-850)"
+            min="300"
+            max="850"
+            labelClassName="text-textDark"
+            inputClassName="focus:ring-primary focus:border-primary"
+          />
+
+          {formError && <p className="text-sm text-red-700 bg-red-100 p-3 rounded-md border border-red-300">{formError}</p>}
+          {formSuccess && <p className="text-sm text-green-700 bg-green-100 p-3 rounded-md border border-green-300">{formSuccess}</p>}
+
+          <div className="pt-2">
+            <Button 
+                type="submit" 
+                variant="primary" 
+                fullWidth 
+                disabled={submitting}
+            >
+              {submitting ? <LoadingSpinner text="Submitting Request..." size="sm" color="white"/> : 'Submit Loan Request'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default CreateLoanRequestPage;

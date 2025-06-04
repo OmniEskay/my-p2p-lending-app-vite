@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { PAGES, APP_NAME } from '../config/constants'; // Ensure APP_NAME is imported
+import { PAGES, APP_NAME } from '../config/constants';
 import Button from '../components/Common/Button';
 import LoadingSpinner from '../components/Common/LoadingSpinner';
 import { getPlatformStats, getUserActivityStats } from '../services/firestoreService';
@@ -9,39 +9,66 @@ import { Bar, Doughnut } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend);
 
+// Default state for user activity if fetch fails or no data
+const defaultUserActivity = {
+  loansOffered: 0,
+  loansBorrowed: 0,
+  totalInvested: 0,
+  totalBorrowed: 0,
+  loansLent: 0 // This was in getUserActivityStats, ensure it's here for consistency
+};
+
 function DashboardPage({ setCurrentPage }) {
   const { currentUser, userData } = useAuth();
   const [platformStats, setPlatformStats] = useState(null);
-  const [userActivity, setUserActivity] = useState(null);
+  const [userActivity, setUserActivity] = useState(currentUser ? defaultUserActivity : null); // Initialize with defaults if user exists
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoadingData(true); // Set loading true at the beginning of any fetch attempt
-      setError(''); // Clear previous errors
+      setLoadingData(true);
+      setError('');
 
       try {
         const platformDataPromise = getPlatformStats();
         let userActivityDataPromise;
 
-        if (currentUser) {
+        if (currentUser && currentUser.uid) { // Ensure currentUser and uid exist
           userActivityDataPromise = getUserActivityStats(currentUser.uid);
           const [platformData, activityData] = await Promise.all([
             platformDataPromise,
             userActivityDataPromise
           ]);
           setPlatformStats(platformData);
-          setUserActivity(activityData);
+          setUserActivity(activityData || defaultUserActivity); // Use fetched or default
         } else {
           // Only fetch platform stats if no user is logged in
           const platformData = await platformDataPromise;
           setPlatformStats(platformData);
-          setUserActivity(null); // Ensure user activity is null if no user
+          setUserActivity(null); // No user, so no user-specific activity
         }
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
-        setError("Failed to load dashboard data. Please try again later.");
+        setError("Failed to load some dashboard data. Displaying available information.");
+        // If platform stats failed, they will be null.
+        // If user activity failed (and user is logged in), set to default to show zeros.
+        if (currentUser) {
+          setUserActivity(defaultUserActivity);
+        } else {
+          setUserActivity(null);
+        }
+        // If getPlatformStats failed, platformStats might remain null or its previous state.
+        // Ensure it's also handled gracefully if it's critical.
+        if (!platformStats) { // If platformStats also failed to load
+            try {
+                const pfData = await getPlatformStats(); // Retry or handle
+                setPlatformStats(pfData);
+            } catch (pfError) {
+                 console.error("Secondary attempt to fetch platform stats failed:", pfError);
+                 setPlatformStats(null); // Ensure it's null if it fails
+            }
+        }
       }
       setLoadingData(false);
     };
@@ -66,8 +93,8 @@ function DashboardPage({ setCurrentPage }) {
             (platformStats?.totalActiveLoanVolume || 0) * 0.15 || 7000, 
             (platformStats?.totalActiveLoanVolume || 0) * 0.1 || 5000
         ],
-        backgroundColor: 'rgba(84, 119, 146, 0.6)', // palette-medium-blue with opacity
-        borderColor: 'rgba(84, 119, 146, 1)',     // palette-medium-blue
+        backgroundColor: 'rgba(84, 119, 146, 0.6)', 
+        borderColor: 'rgba(84, 119, 146, 1)',     
         borderWidth: 1,
       },
     ],
@@ -83,8 +110,8 @@ function DashboardPage({ setCurrentPage }) {
             platformStats?.totalLoanOffers || 0
         ], 
         backgroundColor: [
-            'rgba(84, 119, 146, 0.7)', // palette-medium-blue
-            'rgba(148, 180, 193, 0.7)', // palette-light-blue
+            'rgba(84, 119, 146, 0.7)', 
+            'rgba(148, 180, 193, 0.7)', 
         ],
         borderColor: [
             'rgba(84, 119, 146, 1)',
@@ -95,7 +122,6 @@ function DashboardPage({ setCurrentPage }) {
     ],
   };
 
-
   return (
     <div className="space-y-8">
       <header className="mb-6">
@@ -103,11 +129,11 @@ function DashboardPage({ setCurrentPage }) {
           Welcome back, {userData?.displayName || currentUser?.email || "Guest"}!
         </h1>
         <p className="text-lg text-textLight mt-1">
-          Your financial hub on {APP_NAME || "PeerLend"}. {/* Corrected to use APP_NAME */}
+          Your financial hub on {APP_NAME}.
         </p>
       </header>
 
-      {error && <p className="text-sm text-red-600 bg-red-100 p-3 rounded-md mb-4">{error}</p>}
+      {error && <p className="text-sm text-red-600 bg-red-100 p-3 rounded-md mb-4 border border-red-300">{error}</p>}
 
       {/* Platform Statistics Section */}
       {platformStats && (
@@ -116,7 +142,7 @@ function DashboardPage({ setCurrentPage }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <div className="bg-white p-5 rounded-xl shadow-lg border border-palette-light-blue hover:shadow-primary/20 transition-shadow">
               <h3 className="text-sm font-medium text-textLight">Total Active Loan Volume</h3>
-              <p className="text-3xl font-bold text-primary mt-1">${platformStats.totalActiveLoanVolume?.toLocaleString() || '0'}</p>
+              <p className="text-3xl font-bold text-primary mt-1">${platformStats.totalActiveLoanVolume?.toLocaleString() || '0.00'}</p>
             </div>
             <div className="bg-white p-5 rounded-xl shadow-lg border border-palette-light-blue hover:shadow-primary/20 transition-shadow">
               <h3 className="text-sm font-medium text-textLight">Active Loans Count</h3>
@@ -124,7 +150,7 @@ function DashboardPage({ setCurrentPage }) {
             </div>
             <div className="bg-white p-5 rounded-xl shadow-lg border border-palette-light-blue hover:shadow-primary/20 transition-shadow">
               <h3 className="text-sm font-medium text-textLight">Avg. Interest Rate</h3>
-              <p className="text-3xl font-bold text-primary mt-1">{platformStats.averageInterestRate?.toFixed(1) || '0'}%</p>
+              <p className="text-3xl font-bold text-primary mt-1">{platformStats.averageInterestRate?.toFixed(1) || '0.0'}%</p>
             </div>
              <div className="bg-white p-5 rounded-xl shadow-lg border border-palette-light-blue hover:shadow-primary/20 transition-shadow">
               <h3 className="text-sm font-medium text-textLight">Total Loan Offers</h3>
@@ -189,10 +215,10 @@ function DashboardPage({ setCurrentPage }) {
                     options={{ 
                         responsive: true, 
                         maintainAspectRatio: false, 
-                        plugins: { legend: { display: false, labels: { color: '#213448'} } }, // textDark
+                        plugins: { legend: { display: false, labels: { color: '#213448'} } },
                         scales: { 
-                            y: { ticks: { color: '#547792' } }, // textLight
-                            x: { ticks: { color: '#547792' } }  // textLight
+                            y: { ticks: { color: '#547792' } }, 
+                            x: { ticks: { color: '#547792' } }  
                         }
                     }} 
                 />
@@ -207,7 +233,7 @@ function DashboardPage({ setCurrentPage }) {
                         options={{ 
                             responsive: true, 
                             maintainAspectRatio: true, 
-                            plugins: { legend: { position: 'bottom', labels: { color: '#213448'} } } // textDark
+                            plugins: { legend: { position: 'bottom', labels: { color: '#213448'} } } 
                         }} 
                     />
                 </div>

@@ -12,7 +12,7 @@ export const PAGES = {
   LOAN_DETAIL: 'LOAN_DETAIL', // For viewing a specific loan
   CREATE_LOAN_OFFER: 'CREATE_LOAN_OFFER', // Lenders create offers
   CREATE_LOAN_REQUEST: 'CREATE_LOAN_REQUEST', // Borrowers create requests
-  // Add other pages as needed
+  EDIT_PROFILE: 'EDIT_PROFILE', // Add this
 };
 
 export const LOAN_STATUS = {

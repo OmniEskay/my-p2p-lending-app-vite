@@ -26,7 +26,7 @@ function LendPage({ setCurrentPage }) {
   useEffect(() => {
     if (currentUser) {
       setLoadingOffers(true);
-      setPageError('');
+      setPageError(''); // Clear previous errors
       const unsubscribe = getMyLoanOffers(currentUser.uid, (offers) => {
         setMyOffers(offers);
         setLoadingOffers(false);
@@ -41,35 +41,44 @@ function LendPage({ setCurrentPage }) {
         }
       };
     } else {
-        // If no current user, ensure loading is false and offers are cleared.
-        // The App.jsx should ideally prevent LendPage from rendering if not logged in.
         setLoadingOffers(false);
         setMyOffers([]);
-        console.log("LendPage: No current user, cannot fetch offers.");
+        // Optionally, if LendPage is reachable without login, show a message or redirect
+        // setPageError("Please log in to view or create loan offers.");
     }
   }, [currentUser]);
 
   const handleOpenOfferModal = () => {
+    if (!currentUser) {
+        setPageError("Please log in to create an offer."); // Show error on page if trying to open modal when not logged in
+        // Or redirect: setCurrentPage(PAGES.LOGIN);
+        return;
+    }
     setOfferAmount('');
     setOfferInterestRate('');
     setOfferTerm('');
     setOfferPurpose('');
-    setFormError('');
-    setPageSuccess('');
+    setFormError(''); // Clear form error for new modal instance
+    setPageSuccess(''); // Clear page success messages
     setIsOfferModalOpen(true);
   };
 
   const handleCloseOfferModal = () => {
     setIsOfferModalOpen(false);
-    setFormError('');
+    setFormError(''); // Clear form error when modal is closed
   };
 
   const handleSubmitOffer = async (e) => {
     e.preventDefault();
+    // This check is redundant if handleOpenOfferModal already checks, but good for safety
     if (!currentUser) {
-      setFormError("You must be logged in to create an offer.");
+      setFormError("Assertion failed: You must be logged in to create an offer.");
       return;
     }
+    
+    setFormError(''); // Clear previous form errors
+    setPageSuccess(''); // Clear previous page success messages
+
     const amount = parseFloat(offerAmount);
     const rate = parseFloat(offerInterestRate);
     const term = parseInt(offerTerm);
@@ -92,7 +101,6 @@ function LendPage({ setCurrentPage }) {
     }
 
     setSubmittingOffer(true);
-    setFormError('');
     try {
       await createLoanOffer({
         lenderId: currentUser.uid,
@@ -104,9 +112,10 @@ function LendPage({ setCurrentPage }) {
       });
       setPageSuccess("Loan offer created successfully!");
       handleCloseOfferModal();
+      // Data will refresh via the onSnapshot listener in useEffect
     } catch (err) {
       console.error("LendPage: Error creating loan offer:", err);
-      setFormError(err.message || "Failed to create loan offer. Please try again.");
+      setFormError(err.message || "Failed to create loan offer. Please try again. Check console for details.");
     }
     setSubmittingOffer(false);
   };
@@ -115,20 +124,20 @@ function LendPage({ setCurrentPage }) {
     if (!window.confirm("Are you sure you want to cancel this loan offer? This action cannot be undone if the offer is not yet funded.")) {
       return;
     }
-    setPageError('');
+    setPageError(''); 
     setPageSuccess('');
     try {
       await cancelLoanOffer(offerId, currentUser.uid);
       setPageSuccess("Loan offer cancelled successfully.");
+      // Data will refresh via the onSnapshot listener in useEffect
     } catch (err) {
       console.error("LendPage: Error cancelling offer:", err);
       setPageError(err.message || "Failed to cancel offer.");
     }
   };
 
-  // If there's no logged-in user, App.jsx should redirect to LoginPage.
-  // However, as a fallback or for clarity, we can show a message here too.
-  if (!currentUser && !loadingOffers) { // Check !loadingOffers to avoid showing this during initial auth check
+  // Fallback if component somehow renders without currentUser (App.jsx should prevent this)
+  if (!loadingOffers && !currentUser) {
     return (
         <div className="text-center py-10">
             <p className="text-textLight text-lg">Please log in to manage or create loan offers.</p>
@@ -143,16 +152,19 @@ function LendPage({ setCurrentPage }) {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-bold text-textDark">Your Loan Offers</h1>
-        {/* Explicitly styled button for guaranteed visibility using theme colors */}
         <button
             onClick={handleOpenOfferModal}
-            className="px-4 py-2 rounded-md font-semibold shadow-md hover:shadow-lg transition-shadow bg-primary hover:bg-primary-dark text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-dark"
+            disabled={!currentUser} // Disable button if no user (though page shouldn't render)
+            className={`px-4 py-2 rounded-md font-semibold shadow-md hover:shadow-lg transition-all 
+                        bg-primary hover:bg-primary-dark text-white 
+                        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-dark
+                        ${!currentUser ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           + Create New Loan Offer
         </button>
       </div>
       
-      {pageError && <p className="text-sm text-red-600 bg-red-100 p-3 rounded-md border border-red-300">{pageError}</p>}
+      {pageError && <p className="text-sm text-red-700 bg-red-100 p-3 rounded-md border border-red-300">{pageError}</p>}
       {pageSuccess && <p className="text-sm text-green-700 bg-green-100 p-3 rounded-md border border-green-300">{pageSuccess}</p>}
 
       {loadingOffers ? (
@@ -182,7 +194,7 @@ function LendPage({ setCurrentPage }) {
       <Modal 
         isOpen={isOfferModalOpen} 
         onClose={handleCloseOfferModal} 
-        title="Create New Loan Offer"
+        title="Create New Loan Offer" // The Modal component itself should theme its title
       >
         <form onSubmit={handleSubmitOffer} className="space-y-4">
           <InputField
