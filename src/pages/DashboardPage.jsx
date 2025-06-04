@@ -9,75 +9,83 @@ import { Bar, Doughnut } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend);
 
-// Default state for user activity if fetch fails or no data
 const defaultUserActivity = {
   loansOffered: 0,
   loansBorrowed: 0,
   totalInvested: 0,
   totalBorrowed: 0,
-  loansLent: 0 // This was in getUserActivityStats, ensure it's here for consistency
+  loansLent: 0
 };
 
 function DashboardPage({ setCurrentPage }) {
-  const { currentUser, userData } = useAuth();
+  const { currentUser, userData, loadingAuth } = useAuth();
   const [platformStats, setPlatformStats] = useState(null);
-  const [userActivity, setUserActivity] = useState(currentUser ? defaultUserActivity : null); // Initialize with defaults if user exists
+  const [userActivity, setUserActivity] = useState(currentUser ? defaultUserActivity : null);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // Wait for authentication to be resolved before attempting to fetch data
+    if (loadingAuth) {
+      setLoadingData(true); // Ensure loading spinner is shown while auth is resolving
+      return;
+    }
+
     const fetchData = async () => {
       setLoadingData(true);
       setError('');
 
       try {
-        const platformDataPromise = getPlatformStats();
-        let userActivityDataPromise;
-
-        if (currentUser && currentUser.uid) { // Ensure currentUser and uid exist
-          userActivityDataPromise = getUserActivityStats(currentUser.uid);
+        if (currentUser && currentUser.uid) {
+          // User is authenticated, fetch both platform and user-specific stats
+          console.log("DashboardPage: Authenticated user found, fetching all data...");
           const [platformData, activityData] = await Promise.all([
-            platformDataPromise,
-            userActivityDataPromise
+            getPlatformStats(), // This requires auth based on current rules
+            getUserActivityStats(currentUser.uid)
           ]);
           setPlatformStats(platformData);
-          setUserActivity(activityData || defaultUserActivity); // Use fetched or default
+          setUserActivity(activityData || defaultUserActivity);
         } else {
-          // Only fetch platform stats if no user is logged in
-          const platformData = await platformDataPromise;
-          setPlatformStats(platformData);
+          // No authenticated user, or currentUser.uid is not available.
+          // Platform stats might be public if rules allowed, but current rules require auth.
+          console.log("DashboardPage: No authenticated user. Platform stats might not load if they require authentication.");
+          // Attempt to fetch platform stats anyway; rules will dictate success.
+          // If rules strictly require auth, this will likely result in a (handled) error or empty data.
+          try {
+            const platformData = await getPlatformStats();
+            setPlatformStats(platformData);
+          } catch (platformErr) {
+            console.warn("DashboardPage: Could not fetch platform stats (likely due to auth requirement):", platformErr.message);
+            setPlatformStats(null); // Ensure it's null if it fails
+          }
           setUserActivity(null); // No user, so no user-specific activity
         }
       } catch (err) {
-        console.error("Error fetching dashboard data:", err);
-        setError("Failed to load some dashboard data. Displaying available information.");
-        // If platform stats failed, they will be null.
-        // If user activity failed (and user is logged in), set to default to show zeros.
+        console.error("DashboardPage: Error fetching dashboard data:", err);
+        setError("Failed to load some dashboard data. Please ensure you are logged in if data is missing.");
+        // Fallback states
         if (currentUser) {
           setUserActivity(defaultUserActivity);
         } else {
           setUserActivity(null);
         }
-        // If getPlatformStats failed, platformStats might remain null or its previous state.
-        // Ensure it's also handled gracefully if it's critical.
-        if (!platformStats) { // If platformStats also failed to load
-            try {
-                const pfData = await getPlatformStats(); // Retry or handle
-                setPlatformStats(pfData);
-            } catch (pfError) {
-                 console.error("Secondary attempt to fetch platform stats failed:", pfError);
-                 setPlatformStats(null); // Ensure it's null if it fails
-            }
-        }
+        // If platformStats also failed, ensure it's null
+        setPlatformStats(prevStats => {
+            // Check if the error specifically mentions platform stats or if platformStats is not yet set
+            const isPlatformStatError = err.message.toLowerCase().includes("platform stats") || err.message.toLowerCase().includes("loanoffers") || err.message.toLowerCase().includes("activeloans");
+            return isPlatformStatError || !prevStats ? null : prevStats;
+        });
       }
       setLoadingData(false);
     };
 
     fetchData();
-  }, [currentUser]); // Re-fetch if the user changes
 
-  if (loadingData) {
-    return <LoadingSpinner text="Loading Dashboard Data..." />;
+  }, [currentUser, loadingAuth]); // Re-fetch if currentUser or loadingAuth changes
+
+  // Show a general loading spinner while auth state is being determined OR data is fetching
+  if (loadingAuth || loadingData) {
+    return <LoadingSpinner text={loadingAuth ? "Initializing Dashboard..." : "Loading Dashboard Data..."} />;
   }
 
   // Chart Data - using fetched data or defaults
@@ -136,13 +144,13 @@ function DashboardPage({ setCurrentPage }) {
       {error && <p className="text-sm text-red-600 bg-red-100 p-3 rounded-md mb-4 border border-red-300">{error}</p>}
 
       {/* Platform Statistics Section */}
-      {platformStats && (
+      {platformStats ? (
         <section>
           <h2 className="text-2xl font-semibold text-textDark mb-4">Platform Snapshot</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <div className="bg-white p-5 rounded-xl shadow-lg border border-palette-light-blue hover:shadow-primary/20 transition-shadow">
               <h3 className="text-sm font-medium text-textLight">Total Active Loan Volume</h3>
-              <p className="text-3xl font-bold text-primary mt-1">${platformStats.totalActiveLoanVolume?.toLocaleString() || '0.00'}</p>
+              <p className="text-3xl font-bold text-primary mt-1">${platformStats.totalActiveLoanVolume?.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) || '0.00'}</p>
             </div>
             <div className="bg-white p-5 rounded-xl shadow-lg border border-palette-light-blue hover:shadow-primary/20 transition-shadow">
               <h3 className="text-sm font-medium text-textLight">Active Loans Count</h3>
@@ -158,7 +166,15 @@ function DashboardPage({ setCurrentPage }) {
             </div>
           </div>
         </section>
+      ) : !loadingData && ( // Show message if platform stats couldn't be loaded (and not actively loading)
+        <section>
+            <h2 className="text-2xl font-semibold text-textDark mb-4">Platform Snapshot</h2>
+            <p className="text-textLight bg-white p-4 rounded-md border border-palette-light-blue">
+                {error ? "Could not load platform statistics due to an error." : "Platform statistics are currently unavailable."}
+            </p>
+        </section>
       )}
+
 
       {/* User Specific Activity Section */}
       {currentUser && userActivity && ( 
@@ -203,7 +219,7 @@ function DashboardPage({ setCurrentPage }) {
       )}
 
       {/* Charts Section */}
-      {platformStats && (
+      {platformStats && ( // Only show charts if platformStats are available
         <section>
           <h2 className="text-2xl font-semibold text-textDark mb-6">Platform Visual Insights</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
